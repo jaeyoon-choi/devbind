@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "devbind"
+dynamic = ["version"]
+description = "Manage PCIe device-driver bindings via sysfs"
+license = "BSD-3-Clause"
+requires-python = ">=3.10"
+authors = [
+    {name = "Simon A. F. Lund", email = "os@safl.dk"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Hardware",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "pytest"]
+
+[project.scripts]
+devbind = "devbind.devbind:main"
+
+[project.urls]
+Homepage = "https://github.com/xnvme/devbind"
+Repository = "https://github.com/xnvme/devbind"
+Issues = "https://github.com/xnvme/devbind/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "devbind.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 99
