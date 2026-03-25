@@ -35,7 +35,6 @@ import time
 import logging as log
 from itertools import chain
 from typing import Optional
-from pprint import pprint
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
 
@@ -55,18 +54,13 @@ def sysfs_write(path: Path, text):
 
 
 class System(object):
-
     DRIVERS = {"nvme", "vfio-pci", "vfio-noiommu", "uio_pci_generic"}
 
     drivers: dict = {}
 
     def probe_drivers(self):
-
         loaded = set(
-            (
-                path.name
-                for path in Path(f"/sys/bus/pci/drivers").resolve(strict=True).glob("*")
-            )
+            (path.name for path in Path("/sys/bus/pci/drivers").resolve(strict=True).glob("*"))
         )
 
         missing = self.DRIVERS - loaded
@@ -117,11 +111,7 @@ class Device:
         """Populate driver via sysfs; returns False if no driver is found"""
 
         try:
-            self.driver = (
-                Path(f"/sys/bus/pci/devices/{self.bdf}/driver")
-                .resolve(strict=True)
-                .name
-            )
+            self.driver = Path(f"/sys/bus/pci/devices/{self.bdf}/driver").resolve(strict=True).name
         except FileNotFoundError:
             pass
         return self.driver is not None
@@ -131,9 +121,7 @@ class Device:
 
         try:
             self.iommugroup = int(
-                Path(f"/sys/bus/pci/devices/{self.bdf}/iommu_group")
-                .resolve(strict=True)
-                .name
+                Path(f"/sys/bus/pci/devices/{self.bdf}/iommu_group").resolve(strict=True).name
             )
         except FileNotFoundError:
             self.iommugroup = None
@@ -189,7 +177,7 @@ def device_scan(args):
 def print_props(args, device: Device):
     """Pretty-print the properties of a device"""
 
-    print(f"props:")
+    print("props:")
     for key, val in asdict(device).items():
         if isinstance(val, int) or isinstance(val, list):
             print(f"  {key}: {val}")
@@ -237,7 +225,7 @@ def bind(args, device: Device, driver_name: str):
     # Enable BUS-mastering (tell it that it can initiate DMA)
     if driver_name == "uio_pci_generic":
         log.info(f"Running setpci to enable bus-mastering; driver_name({driver_name})")
-        proc = run(f"setpci -s {device.bdf} COMMAND=0x06")
+        run(f"setpci -s {device.bdf} COMMAND=0x06")
     else:
         log.info(f"Not running setpci; driver_name({driver_name})")
 
@@ -276,9 +264,7 @@ def parse_args():
         help="Unbind if bound; then bind to the given driver-name [nvme, vfio-pci, uio-pci-generic] or to a .ko driver file (path)",
     )
 
-    parser.add_argument(
-        "--verbose", action="store_true", help="Print log-messages beyond errors"
-    )
+    parser.add_argument("--verbose", action="store_true", help="Print log-messages beyond errors")
 
     args = parser.parse_args()
 
@@ -286,7 +272,6 @@ def parse_args():
 
 
 def main(args):
-
     system = System()
     system.probe_drivers()
 
@@ -294,9 +279,7 @@ def main(args):
         system.pp()
 
     devices = [
-        device
-        for device in device_scan(args)
-        if not args.device or (args.device == device.bdf)
+        device for device in device_scan(args) if not args.device or (args.device == device.bdf)
     ]
 
     for cur, device in enumerate(devices, 1):
