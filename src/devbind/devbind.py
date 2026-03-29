@@ -301,17 +301,22 @@ def main(args):
                 bind(args, device, args.bind)
 
 
-if __name__ == "__main__":
-    ARGS = parse_args()
+def cli():
+    """Entry point for the console_script."""
+    args = parse_args()
 
     log.basicConfig(
-        level=log.DEBUG if ARGS.verbose else log.INFO,
+        level=log.DEBUG if args.verbose else log.INFO,
         format="# %(levelname)s: %(message)s",
     )
 
     try:
-        sys.exit(main(ARGS))
+        sys.exit(main(args))
     except PermissionError as exc:
         log.error(str(exc))
         log.error("You need to have CAP_SYS_ADMIN e.g. run as 'root' or with 'sudo'")
         sys.exit(errno.EPERM)
+
+
+if __name__ == "__main__":
+    cli()

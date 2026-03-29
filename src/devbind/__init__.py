@@ -3,6 +3,6 @@
 
 __version__ = "0.1.0"
 
-from .devbind import main
+from .devbind import cli, main
 
-__all__ = ["main"]
+__all__ = ["cli", "main"]
