@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) Simon Andreas Frimann Lund <os@safl.dk>
 
-__version__ = "0.1.1"
+from .devbind import __version__, cli, main
 
-from .devbind import cli, main
-
-__all__ = ["cli", "main"]
+__all__ = ["__version__", "cli", "main"]

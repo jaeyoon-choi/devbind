@@ -38,7 +38,29 @@ from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
 
+__version__ = "0.2.0"
+
 PCIE_DEFAULT_CLASSCODE = 0x0108  # Mass Storage - NVM
+
+BASH_COMPLETION = r"""# bash completion for devbind
+_devbind() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
+    local prev="${COMP_WORDS[COMP_CWORD-1]}"
+    local drivers="nvme vfio-pci vfio-noiommu uio_pci_generic"
+    local opts="--classcode --device --list --unbind --bind --verbose --help --print-completion"
+    case "${prev}" in
+        --bind)
+            COMPREPLY=($(compgen -W "${drivers}" -- "${cur}"))
+            compopt -o default 2>/dev/null
+            return 0
+            ;;
+    esac
+    if [[ ${cur} == -* ]]; then
+        COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))
+    fi
+}
+complete -F _devbind devbind
+"""
 
 
 def run(cmd: str):
@@ -233,6 +255,8 @@ def bind(args, device: Device, driver_name: str):
 def parse_args():
     parser = argparse.ArgumentParser(description="Parse device binding options.")
 
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+
     parser.add_argument(
         "--classcode",
         default=PCIE_DEFAULT_CLASSCODE,
@@ -265,6 +289,13 @@ def parse_args():
     )
 
     parser.add_argument("--verbose", action="store_true", help="Print log-messages beyond errors")
+
+    parser.add_argument(
+        "--print-completion",
+        choices=["bash"],
+        metavar="SHELL",
+        help="Print shell completion script to stdout and exit",
+    )
 
     args = parser.parse_args()
 
@@ -304,6 +335,10 @@ def main(args):
 def cli():
     """Entry point for the console_script."""
     args = parse_args()
+
+    if args.print_completion == "bash":
+        sys.stdout.write(BASH_COMPLETION)
+        return
 
     log.basicConfig(
         level=log.DEBUG if args.verbose else log.INFO,
