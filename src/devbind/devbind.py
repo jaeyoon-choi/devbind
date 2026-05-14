@@ -79,8 +79,9 @@ def sysfs_write(path: Path, text):
 class System:
     DRIVERS = {"nvme", "vfio-pci", "vfio-noiommu", "uio_pci_generic"}
 
-    # DPDK/SPDK convention: VFIO_IOMMU_MAP_DMA pins userspace pages against
-    # RLIMIT_MEMLOCK. Below 64 MiB the buffer-pool allocation fails outright.
+    # DPDK/SPDK and xNVMe/uPCIe convention: VFIO_IOMMU_MAP_DMA pins user
+    # space pages against RLIMIT_MEMLOCK. Below 64 MiB the buffer-pool
+    # allocation fails outright.
     MEMLOCK_DPDK_MIN_BYTES = 64 * 1024 * 1024
 
     drivers: dict = {}
@@ -109,7 +110,7 @@ class System:
             log.warning(
                 f"memlock soft limit ({self._fmt_bytes(soft)}) is below "
                 f"{self._fmt_bytes(self.MEMLOCK_DPDK_MIN_BYTES)}; "
-                "VFIO_IOMMU_MAP_DMA will fail for DPDK/SPDK. "
+                "VFIO_IOMMU_MAP_DMA will fail for DPDK/SPDK and xNVMe/uPCIe. "
                 "Raise via /etc/security/limits.d/, prlimit, or systemd LimitMEMLOCK="
             )
 
