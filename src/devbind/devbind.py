@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) Simon Andreas Frimann Lund <os@safl.dk>
 #
-# Get info about and control driver associcated with NVMe devices
+# Get info about and control driver associated with NVMe devices
 #
 # This makes use of the following tools:
 #
@@ -31,6 +31,7 @@ import os
 import subprocess
 import argparse
 import errno
+import resource
 import time
 import logging as log
 from itertools import chain
@@ -38,7 +39,7 @@ from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 PCIE_DEFAULT_CLASSCODE = 0x0108  # Mass Storage - NVM
 
@@ -75,10 +76,15 @@ def sysfs_write(path: Path, text):
         f.write(f"{text}\n")
 
 
-class System(object):
+class System:
     DRIVERS = {"nvme", "vfio-pci", "vfio-noiommu", "uio_pci_generic"}
 
+    # DPDK/SPDK convention: VFIO_IOMMU_MAP_DMA pins userspace pages against
+    # RLIMIT_MEMLOCK. Below 64 MiB the buffer-pool allocation fails outright.
+    MEMLOCK_DPDK_MIN_BYTES = 64 * 1024 * 1024
+
     drivers: dict = {}
+    limits: dict = {}
 
     def probe_drivers(self):
         loaded = set(
@@ -92,11 +98,39 @@ class System(object):
                 "available": driver_name not in missing,
             }
 
+    def probe_limits(self):
+        """Read process resource limits relevant to vfio-pci consumers"""
+
+        soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+        self.limits["memlock_soft"] = soft
+        self.limits["memlock_hard"] = hard
+
+        if soft != resource.RLIM_INFINITY and soft < self.MEMLOCK_DPDK_MIN_BYTES:
+            log.warning(
+                f"memlock soft limit ({self._fmt_bytes(soft)}) is below "
+                f"{self._fmt_bytes(self.MEMLOCK_DPDK_MIN_BYTES)}; "
+                "VFIO_IOMMU_MAP_DMA will fail for DPDK/SPDK. "
+                "Raise via /etc/security/limits.d/, prlimit, or systemd LimitMEMLOCK="
+            )
+
+    @staticmethod
+    def _fmt_bytes(n):
+        if n == resource.RLIM_INFINITY:
+            return "unlimited"
+        for unit in ("B", "kB", "MB", "GB", "TB"):
+            if n < 1024:
+                return f"{n} {unit}"
+            n //= 1024
+        return f"{n} PB"
+
     def pp(self):
         print("system:")
         print("  drivers:")
         for driver_name, props in self.drivers.items():
             print(f"  - {driver_name}: {props}")
+        print("  limits:")
+        for name, val in self.limits.items():
+            print(f"    {name}: {self._fmt_bytes(val)}")
 
 
 @dataclass
@@ -253,7 +287,7 @@ def bind(args, device: Device, driver_name: str):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Parse device binding options.")
+    parser = argparse.ArgumentParser(description="Manage PCIe device-driver bindings via sysfs")
 
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
@@ -285,10 +319,10 @@ def parse_args():
     parser.add_argument(
         "--bind",
         type=parse_bind,
-        help="Unbind if bound; then bind to the given driver-name [nvme, vfio-pci, uio-pci-generic] or to a .ko driver file (path)",
+        help="Unbind if bound; then bind to the given driver-name [nvme, vfio-pci, uio_pci_generic] or to a .ko driver file (path)",
     )
 
-    parser.add_argument("--verbose", action="store_true", help="Print log-messages beyond errors")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     parser.add_argument(
         "--print-completion",
@@ -297,43 +331,10 @@ def parse_args():
         help="Print shell completion script to stdout and exit",
     )
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
-def main(args):
-    system = System()
-    system.probe_drivers()
-
-    if args.list:
-        system.pp()
-
-    devices = [
-        device for device in device_scan(args) if not args.device or (args.device == device.bdf)
-    ]
-
-    for cur, device in enumerate(devices, 1):
-        log.info(f"Device({device.bdf}) -- {cur}/{len(devices)}")
-
-        if args.list:
-            print_props(args, device)
-
-        if args.unbind:
-            if device.is_used:
-                log.info(f"Skipping unbind({device.driver}); device is in use.")
-            else:
-                unbind(args, device)
-
-        if args.bind:
-            if device.is_used:
-                log.info(f"Skipping bind({args.bind}); device is in use.")
-            else:
-                bind(args, device, args.bind)
-
-
-def cli():
-    """Entry point for the console_script."""
+def main():
     args = parse_args()
 
     if args.print_completion == "bash":
@@ -345,13 +346,44 @@ def cli():
         format="# %(levelname)s: %(message)s",
     )
 
+    if (args.bind or args.unbind) and os.geteuid() != 0:
+        log.error("Binding/unbinding PCIe devices requires root. Re-run with sudo.")
+        sys.exit(errno.EPERM)
+
+    system = System()
+    system.probe_drivers()
+    system.probe_limits()
+
+    if args.list:
+        system.pp()
+
+    devices = [
+        device for device in device_scan(args) if not args.device or (args.device == device.bdf)
+    ]
+
     try:
-        sys.exit(main(args))
+        for cur, device in enumerate(devices, 1):
+            log.info(f"Device({device.bdf}) -- {cur}/{len(devices)}")
+
+            if args.list:
+                print_props(args, device)
+
+            if args.unbind:
+                if device.is_used:
+                    log.info(f"Skipping unbind({device.driver}); device is in use.")
+                else:
+                    unbind(args, device)
+
+            if args.bind:
+                if device.is_used:
+                    log.info(f"Skipping bind({args.bind}); device is in use.")
+                else:
+                    bind(args, device, args.bind)
     except PermissionError as exc:
         log.error(str(exc))
-        log.error("You need to have CAP_SYS_ADMIN e.g. run as 'root' or with 'sudo'")
+        log.error("Binding/unbinding PCIe devices requires root. Re-run with sudo.")
         sys.exit(errno.EPERM)
 
 
 if __name__ == "__main__":
-    cli()
+    main()

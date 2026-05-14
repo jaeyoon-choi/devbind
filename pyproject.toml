@@ -29,7 +29,7 @@ classifiers = [
 dev = ["ruff", "pytest"]
 
 [project.scripts]
-devbind = "devbind.devbind:cli"
+devbind = "devbind.devbind:main"
 
 [project.urls]
 Homepage = "https://github.com/xnvme/devbind"
