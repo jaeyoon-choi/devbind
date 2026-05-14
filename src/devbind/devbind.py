@@ -82,7 +82,7 @@ class System:
     # DPDK/SPDK and xNVMe/uPCIe convention: VFIO_IOMMU_MAP_DMA pins user
     # space pages against RLIMIT_MEMLOCK. Below 64 MiB the buffer-pool
     # allocation fails outright.
-    MEMLOCK_DPDK_MIN_BYTES = 64 * 1024 * 1024
+    MEMLOCK_MIN_BYTES = 64 * 1024 * 1024
 
     drivers: dict = {}
     limits: dict = {}
@@ -106,10 +106,10 @@ class System:
         self.limits["memlock_soft"] = soft
         self.limits["memlock_hard"] = hard
 
-        if soft != resource.RLIM_INFINITY and soft < self.MEMLOCK_DPDK_MIN_BYTES:
+        if soft != resource.RLIM_INFINITY and soft < self.MEMLOCK_MIN_BYTES:
             log.warning(
                 f"memlock soft limit ({self._fmt_bytes(soft)}) is below "
-                f"{self._fmt_bytes(self.MEMLOCK_DPDK_MIN_BYTES)}; "
+                f"{self._fmt_bytes(self.MEMLOCK_MIN_BYTES)}; "
                 "VFIO_IOMMU_MAP_DMA will fail for DPDK/SPDK and xNVMe/uPCIe. "
                 "Raise via /etc/security/limits.d/, prlimit, or systemd LimitMEMLOCK="
             )
