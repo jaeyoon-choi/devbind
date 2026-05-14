@@ -1,6 +1,6 @@
 # devbind
 
-![devbind: inspect and control PCI device-driver bindings](assets/banner.svg)
+![devbind: inspect and control PCI device-driver bindings](https://raw.githubusercontent.com/xnvme/devbind/main/assets/banner.svg)
 
 Convenience tool to manage driving PCIe device-driver association.
 
