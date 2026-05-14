@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "devbind"
 dynamic = ["version"]
-description = "Manage PCIe device-driver bindings via sysfs"
+description = "Inspect and control PCI device-driver binding in Linux"
 readme = "README.md"
 license = "BSD-3-Clause"
 requires-python = ">=3.10"

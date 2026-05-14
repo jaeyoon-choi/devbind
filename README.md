@@ -1,8 +1,8 @@
+![devbind: inspect and control PCI device-driver binding in Linux](https://raw.githubusercontent.com/xnvme/devbind/main/assets/banner.svg)
+
 # devbind
 
-![devbind: inspect and control PCI device-driver bindings](https://raw.githubusercontent.com/xnvme/devbind/main/assets/banner.svg)
-
-Convenience tool to manage driving PCIe device-driver association.
+Inspect and control PCI device-driver binding in Linux.
 
 ## Install
 
