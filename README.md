@@ -43,14 +43,16 @@ sudo devbind --unbind --device 0000:01:00.0          # unbind without rebinding
 ```
 system:
   drivers:
-  - nvme: {'available': True}
-  - uio_pci_generic: {'available': True}
+  - uio_pci_generic: {'available': False}
   - vfio-noiommu: {'available': False}
-  - vfio-pci: {'available': True}
+  - vfio-pci: {'available': False}
+  - nvme: {'available': True}
   limits:
-    memlock_soft: unlimited
-    memlock_hard: unlimited
+    memlock_soft: 64 MB
+    memlock_hard: 64 MB
 ```
+
+On a host with NVMe devices visible, a `props:` block is also printed per device with `bdf`, `vendor`, `device`, `classcode`, `driver`, `iommugroup`, `handles`, and `is_used`.
 
 ## Related
 
