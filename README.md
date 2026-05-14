@@ -1,6 +1,6 @@
 # devbind
 
-![devbind — inspect and control PCI device-driver bindings](assets/banner.svg)
+![devbind: inspect and control PCI device-driver bindings](assets/banner.svg)
 
 Convenience tool to manage driving PCIe device-driver association.
 
@@ -10,10 +10,10 @@ Convenience tool to manage driving PCIe device-driver association.
 pipx install devbind
 ```
 
-Or standalone (single-file, stdlib only -- no pip needed):
+Or standalone (single-file, stdlib only, no pip needed):
 
 ```
-curl -fsSL https://raw.githubusercontent.com/safl/devbind/main/src/devbind/devbind.py \
+curl -fsSL https://raw.githubusercontent.com/xnvme/devbind/main/src/devbind/devbind.py \
   -o ~/.local/bin/devbind && chmod +x ~/.local/bin/devbind
 ```
 
