@@ -6,7 +6,13 @@
 [![Python](https://img.shields.io/pypi/pyversions/devbind.svg)](https://pypi.org/project/devbind/)
 [![Test](https://github.com/xnvme/devbind/actions/workflows/test.yml/badge.svg)](https://github.com/xnvme/devbind/actions/workflows/test.yml)
 
-Inspect and control PCI device-driver binding in Linux.
+`devbind` is a small CLI for binding and unbinding PCI devices to a
+chosen kernel driver via sysfs. The typical use is moving a device
+between its native driver (e.g. `nvme`) and a user space driver
+framework (`vfio-pci`, `uio_pci_generic`) for DPDK/SPDK and xNVMe/uPCIe
+workloads. `devbind --list` also reports the process `RLIMIT_MEMLOCK`
+and warns when the soft limit is below the 64 MiB threshold those
+frameworks inherit.
 
 ## Install
 
@@ -83,5 +89,5 @@ On a host with NVMe devices visible, a `props:` block is also printed per device
 
 ## Related
 
-- [`iommu`](https://github.com/safl/iommu): inspect and configure the IOMMU isolation level in Linux.
+- [`iommu`](https://github.com/safl/iommu): inspect and configure the IOMMU in Linux.
 - [`hugepages`](https://github.com/xnvme/hugepages): inspect and manage Linux hugepages.

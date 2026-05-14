@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="560" height="203" viewBox="0 0 560 203" font-family="Menlo, Monaco, Consolas, &quot;Courier New&quot;, monospace" font-size="16">
 <rect width="100%" height="100%" fill="#0d1117" rx="8"/>
-<text x="16" y="35" fill="#005fff" xml:space="preserve">██████╗ ███████╗██╗   ██╗██████╗ ██╗███╗   ██╗██████╗ </text>
-<text x="16" y="54" fill="#0087ff" xml:space="preserve">██╔══██╗██╔════╝██║   ██║██╔══██╗██║████╗  ██║██╔══██╗</text>
-<text x="16" y="73" fill="#00afff" xml:space="preserve">██║  ██║█████╗  ██║   ██║██████╔╝██║██╔██╗ ██║██║  ██║</text>
-<text x="16" y="92" fill="#00d7ff" xml:space="preserve">██║  ██║██╔══╝  ╚██╗ ██╔╝██╔══██╗██║██║╚██╗██║██║  ██║</text>
-<text x="16" y="111" fill="#00ffff" xml:space="preserve">██████╔╝███████╗ ╚████╔╝ ██████╔╝██║██║ ╚████║██████╔╝</text>
-<text x="16" y="130" fill="#5fffff" xml:space="preserve">╚═════╝ ╚══════╝  ╚═══╝  ╚═════╝ ╚═╝╚═╝  ╚═══╝╚═════╝ </text>
-<text x="16" y="149" fill="#87ffff" xml:space="preserve">                                                      </text>
-<text x="16.0" y="172" fill="#87ffff" font-style="italic" xml:space="preserve">inspect and control PCI device-driver binding in Linux</text>
+<text x="16" y="35" fill="#005fff" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██████╗ ███████╗██╗   ██╗██████╗ ██╗███╗   ██╗██████╗ </text>
+<text x="16" y="54" fill="#0087ff" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██╔══██╗██╔════╝██║   ██║██╔══██╗██║████╗  ██║██╔══██╗</text>
+<text x="16" y="73" fill="#00afff" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██║  ██║█████╗  ██║   ██║██████╔╝██║██╔██╗ ██║██║  ██║</text>
+<text x="16" y="92" fill="#00d7ff" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██║  ██║██╔══╝  ╚██╗ ██╔╝██╔══██╗██║██║╚██╗██║██║  ██║</text>
+<text x="16" y="111" fill="#00ffff" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">██████╔╝███████╗ ╚████╔╝ ██████╔╝██║██║ ╚████║██████╔╝</text>
+<text x="16" y="130" fill="#5fffff" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">╚═════╝ ╚══════╝  ╚═══╝  ╚═════╝ ╚═╝╚═╝  ╚═══╝╚═════╝ </text>
+<text x="16" y="149" fill="#87ffff" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">                                                      </text>
+<text x="16.0" y="172" fill="#87ffff" font-style="italic" textLength="518.4" lengthAdjust="spacingAndGlyphs" xml:space="preserve">inspect and control PCI device-driver binding in Linux</text>
 </svg>
