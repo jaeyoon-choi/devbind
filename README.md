@@ -32,13 +32,40 @@ Open a new shell (or `source` the file) and tab-completion is live: `devbind --b
 ## Usage
 
 ```
+$ devbind --help
+usage: devbind [-h] [--version] [--classcode CLASSCODE] [--device DEVICE]
+               [--list] [--unbind] [--bind BIND] [--verbose]
+               [--print-completion SHELL]
+
+Inspect and control PCI device-driver binding in Linux
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --classcode CLASSCODE
+                        The class of PCIe devices to scan for
+  --device DEVICE       Instead of all; then only the given PCI address.
+  --list                Print PCIe device(s); such as their 'bdf' and driver-
+                        association.
+  --unbind              Unbind if bound.
+  --bind BIND           Unbind if bound; then bind to the given driver-name
+                        [nvme, vfio-pci, uio_pci_generic] or to a .ko driver
+                        file (path)
+  --verbose             Enable verbose logging
+  --print-completion SHELL
+                        Print shell completion script to stdout and exit
+```
+
+A few common invocations:
+
+```
 devbind --list                                       # list NVMe devices and their drivers
 sudo devbind --bind vfio-pci --device 0000:01:00.0   # bind one device to vfio-pci
 sudo devbind --bind nvme --device 0000:01:00.0       # rebind to the native driver
 sudo devbind --unbind --device 0000:01:00.0          # unbind without rebinding
 ```
 
-`devbind --list` sample output:
+`devbind --list` sample output (stock WSL host, no NVMe devices visible):
 
 ```
 system:

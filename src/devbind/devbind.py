@@ -39,7 +39,7 @@ from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
 
-__version__ = "0.3.7"
+__version__ = "0.3.8"
 
 PCIE_DEFAULT_CLASSCODE = 0x0108  # Mass Storage - NVM
 
@@ -288,7 +288,9 @@ def bind(args, device: Device, driver_name: str):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Manage PCIe device-driver bindings via sysfs")
+    parser = argparse.ArgumentParser(
+        description="Inspect and control PCI device-driver binding in Linux"
+    )
 
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
