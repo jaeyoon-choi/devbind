@@ -39,7 +39,7 @@ from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
 
-__version__ = "0.3.9"
+__version__ = "0.3.10"
 
 PCIE_DEFAULT_CLASSCODE = 0x0108  # Mass Storage - NVM
 
@@ -206,14 +206,25 @@ class Device:
 
 
 def device_scan(args):
-    """Yields a Device for each PCIe device with classcode(args.classcode)"""
+    """Yields matching PCIe devices.
+
+    When args.device is set, the class filter is bypassed and the named device
+    is yielded regardless of its class. Otherwise devices whose class matches
+    args.classcode are yielded.
+    """
 
     proc = run("lspci -Dvmmnk")
 
     props = {}
     for line in proc.stdout.splitlines():
         if not line:
-            if int(props.get("classcode", "0"), 16) == args.classcode:
+            classcode = int(props.get("classcode", "0"), 16)
+            bdf = props.get("bdf", "")
+            if args.device:
+                matches = args.device == bdf
+            else:
+                matches = classcode == args.classcode
+            if matches:
                 device = Device.from_dict(props)
                 device.probe_handles()
                 device.probe_usage()
@@ -297,7 +308,8 @@ def parse_args():
     parser.add_argument(
         "--classcode",
         default=PCIE_DEFAULT_CLASSCODE,
-        help="The class of PCIe devices to scan for",
+        type=lambda v: int(v, 16),
+        help="The class of PCIe devices to scan for (hex, e.g. 0x0108 for NVMe)",
     )
 
     parser.add_argument(
@@ -360,9 +372,7 @@ def main():
     if args.list:
         system.pp()
 
-    devices = [
-        device for device in device_scan(args) if not args.device or (args.device == device.bdf)
-    ]
+    devices = list(device_scan(args))
 
     try:
         for cur, device in enumerate(devices, 1):
