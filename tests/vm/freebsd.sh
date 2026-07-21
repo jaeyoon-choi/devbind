@@ -56,7 +56,9 @@ fi
 pciconf -l | grep -q "^nvme[0-9]*@$SEL:" && ok "device still bound after rejection" || bad "device state changed"
 
 note "in-use device is skipped (fstat via nda0)"
-sh -c 'exec 3</dev/nda0; sleep 30' &
+# exec sleep so $HOLDER is the fd-holding pid itself (a plain `sleep` child
+# would inherit fd 3 and survive the kill)
+sh -c 'exec 3</dev/nda0; exec sleep 30' &
 HOLDER=$!
 sleep 1
 $DEVBIND --unbind --device "$BDF" >/tmp/unbind-busy.out 2>&1
