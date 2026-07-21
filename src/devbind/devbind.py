@@ -28,6 +28,7 @@
 #
 import sys
 import os
+import re
 import subprocess
 import argparse
 import errno
@@ -185,12 +186,24 @@ class Device:
         return self.iommugroup is not None
 
     def probe_handles(self):
-        """Determine possible handles to the NVMe device"""
+        """Determine possible handles to the NVMe device
 
+        Namespaces appear under the controller as nvmeXnY -- or as nvmeXcCnY
+        on CONFIG_NVME_MULTIPATH kernels (distro default), where the /dev
+        block device is still named nvmeXnY. Map either form, plus the ng*
+        generic char devices, to their /dev nodes.
+        """
+
+        names = set()
         for top in Path(f"/sys/bus/pci/devices/{self.bdf}/nvme").glob("nvme*"):
             for bottom in chain(top.glob("ng*"), top.glob("nvme*")):
-                for path in Path("/dev").glob(f"{bottom.name}*"):
-                    self.handles.append(str(path))
+                name = re.sub(r"^(nvme\d+)c\d+(n\d+)$", r"\1\2", bottom.name)
+                names.add(name)
+                if name.startswith("nvme"):
+                    names.add("ng" + name[len("nvme") :])
+        for name in sorted(names):
+            for path in Path("/dev").glob(f"{name}*"):
+                self.handles.append(str(path))
 
     def probe_usage(self):
         """Attempt to determine whether the device is in use"""
