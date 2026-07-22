@@ -8,6 +8,8 @@
 # a Backend selected at runtime via get_backend():
 #
 # * Linux   -- sysfs (/sys/bus/pci/...) + lspci / lsof / setpci
+# * FreeBSD -- pciconf / devctl / camcontrol / fstat, with nic_uio as the
+#              userspace stub driver
 #
 # Kept as a single, stdlib-only file so it can be installed by copying this script.
 #
@@ -15,6 +17,7 @@ import sys
 import os
 import re
 import abc
+import shlex
 import subprocess
 import argparse
 import errno
@@ -32,13 +35,13 @@ PCIE_DEFAULT_CLASSCODE = 0x0108  # Mass Storage - NVM
 
 # Driver-names recognised across platforms; used for argument parsing and
 # completion. The active backend reports which are actually available.
-KNOWN_DRIVERS = {"nvme", "vfio-pci", "vfio-noiommu", "uio_pci_generic"}
+KNOWN_DRIVERS = {"nvme", "vfio-pci", "vfio-noiommu", "uio_pci_generic", "nic_uio"}
 
 BASH_COMPLETION = r"""# bash completion for devbind
 _devbind() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
-    local drivers="nvme vfio-pci vfio-noiommu uio_pci_generic"
+    local drivers="nvme vfio-pci vfio-noiommu uio_pci_generic nic_uio"
     local opts="--classcode --device --list --unbind --bind --verbose --help --print-completion"
     case "${prev}" in
         --bind)
@@ -268,18 +271,192 @@ class LinuxBackend(Backend):
             log.info(f"Not running setpci; driver_name({driver_name})")
 
 
+# --- FreeBSD backend ---------------------------------------------------------
+
+# Userspace stub driver used by DPDK/SPDK on FreeBSD (analogous to vfio-pci)
+FREEBSD_USERSPACE_DRIVER = "nic_uio"
+
+
+def selector_to_bdf(selector: str) -> str:
+    """Convert a FreeBSD selector 'pci0:1:0:0' to canonical '0000:01:00.0'"""
+    domain, bus, slot, func = (int(part) for part in selector[len("pci") :].split(":"))
+    return f"{domain:04x}:{bus:02x}:{slot:02x}.{func:x}"
+
+
+def bdf_to_selector(bdf: str) -> str:
+    """Convert a canonical '0000:01:00.0' to a FreeBSD selector 'pci0:1:0:0'"""
+    dom_bus_slot, func = bdf.split(".")
+    domain, bus, slot = dom_bus_slot.split(":")
+    return f"pci{int(domain, 16)}:{int(bus, 16)}:{int(slot, 16)}:{int(func, 16)}"
+
+
+class FreeBsdBackend(Backend):
+    DRIVERS = {"nvme", FREEBSD_USERSPACE_DRIVER}
+
+    @staticmethod
+    def _module_loaded(name: str) -> bool:
+        return run(f"kldstat -q -n {name}").returncode == 0
+
+    def probe_drivers(self):
+        # nvme ships in GENERIC; nic_uio is an out-of-tree module that must be loaded
+        return {
+            "nvme": {"available": True},
+            FREEBSD_USERSPACE_DRIVER: {"available": self._module_loaded(FREEBSD_USERSPACE_DRIVER)},
+        }
+
+    def memlock_remediation_hint(self):
+        return "Raise via the 'memorylocked' capability in /etc/login.conf or /boot/loader.conf"
+
+    @staticmethod
+    def _cam_disks(instance: str) -> list:
+        """Map an nvmeX controller instance to its CAM disk names (e.g. ['nda0'])
+
+        Parses ``camcontrol devlist -v``, whose output groups peripherals under
+        bus headers like ``scbus1 on nvme0 bus 0:``. Legacy nvd(4) disks do not
+        attach via CAM and are not mapped.
+        """
+        disks = []
+        on_our_bus = False
+        for line in run("camcontrol devlist -v").stdout.splitlines():
+            stripped = line.strip()
+            parts = stripped.split()
+            if stripped.startswith("scbus") and len(parts) >= 3 and parts[1] == "on":
+                on_our_bus = parts[2] == instance
+                continue
+            if not on_our_bus or "(" not in stripped:
+                continue
+            names = stripped.rsplit("(", 1)[1].rstrip(")").split(",")
+            disks.extend(name for name in names if name.startswith(("nda", "nvd")))
+        return disks
+
+    @staticmethod
+    def _probe_handles(device: Device, instance: str):
+        """Map the pciconf instance (e.g. 'nvme0') to its /dev nodes"""
+        if not instance.startswith("nvme"):
+            return
+        for stem in [instance] + FreeBsdBackend._cam_disks(instance):
+            for path in Path("/dev").glob(f"{stem}*"):
+                device.handles.append(str(path))
+
+    @staticmethod
+    def _probe_usage(device: Device):
+        """Attempt to determine whether the device is in use via fstat"""
+        if not device.handles:
+            device.is_used = False
+            return
+        handles = " ".join(device.handles)
+        proc = run(f"fstat {handles}")
+        # fstat always prints a header line; any further rows mean an open handle
+        rows = [line for line in proc.stdout.splitlines() if line.strip()]
+        device.is_used = len(rows) > 1
+
+    def scan_devices(self, classcode: int, bdf: Optional[str] = None):
+        # Each `pciconf -l` line, FreeBSD <= 14:
+        #   nvme0@pci0:1:0:0:\tclass=0x010802 card=0x... chip=0xDDDDVVVV rev=0x.. hdr=0x..
+        # FreeBSD 15 replaced the packed chip=/card= fields:
+        #   nvme0@pci0:1:0:0:\tclass=0x010802 rev=0x.. hdr=0x.. vendor=0xVVVV device=0xDDDD ...
+        proc = run("pciconf -l")
+
+        for line in proc.stdout.splitlines():
+            if "@pci" not in line:
+                continue
+
+            parts = line.split()
+            instance, _, selector = parts[0].partition("@")
+            selector = selector.rstrip(":")
+
+            fields = dict(tok.split("=", 1) for tok in parts[1:] if "=" in tok)
+            if "class" not in fields:
+                continue
+
+            if "chip" in fields:
+                chip = int(fields["chip"], 16)
+                vendor = chip & 0xFFFF
+                device_id = (chip >> 16) & 0xFFFF
+            elif "vendor" in fields and "device" in fields:
+                vendor = int(fields["vendor"], 16)
+                device_id = int(fields["device"], 16)
+            else:
+                continue
+
+            cls = int(fields["class"], 16)
+            if bdf:
+                if selector_to_bdf(selector) != bdf:
+                    continue
+            elif (cls >> 8) != classcode:
+                continue
+            # 'none0' (or 'none1', ...) denotes a device without an attached driver
+            stem = instance.rstrip("0123456789")
+            driver = None if stem == "none" else stem
+
+            device = Device(
+                bdf=selector_to_bdf(selector),
+                vendor=f"{vendor:04x}",
+                device=f"{device_id:04x}",
+                classcode=f"{cls >> 8:04x}",
+                driver=driver,
+            )
+            self._probe_handles(device, instance)
+            self._probe_usage(device)
+
+            yield device
+
+    def unbind(self, device: Device):
+        if not device.driver:
+            log.info("Not bound; skipping unbind()")
+            return
+
+        selector = bdf_to_selector(device.bdf)
+        log.info(f"Unbinding({device.bdf}) from '{device.driver}'")
+
+        proc = run(f"devctl detach {selector}")
+        if proc.returncode != 0:
+            message = proc.stderr.strip() or f"devctl detach {selector} failed"
+            log.error(message)
+            raise OSError(message)
+
+    def bind(self, device: Device, driver_name: str):
+        """Bind the driver named 'driver_name' with 'device'"""
+
+        self.unbind(device)
+
+        selector = bdf_to_selector(device.bdf)
+        log.info(f"Binding({device.bdf}) to '{driver_name}'")
+
+        driver_arg = shlex.quote(str(driver_name))
+        proc = run(f"devctl set driver {selector} {driver_arg}")
+        if proc.returncode != 0:
+            message = proc.stderr.strip() or f"devctl set driver {selector} {driver_arg} failed"
+            log.error(message)
+            raise OSError(message)
+
+        # Enable BUS-mastering (memory space + bus master) for the userspace driver
+        if driver_name == FREEBSD_USERSPACE_DRIVER:
+            log.info(f"Running pciconf to enable bus-mastering; driver_name({driver_name})")
+            proc = run(f"pciconf -w -h {selector} 0x4 0x6")
+            if proc.returncode != 0:
+                log.error(
+                    proc.stderr.strip()
+                    or f"pciconf write failed; bus-mastering not enabled for {device.bdf}"
+                )
+        else:
+            log.info(f"Not enabling bus-mastering; driver_name({driver_name})")
+
+
 def get_backend() -> Backend:
     """Return the Backend implementation for the running platform"""
     if sys.platform.startswith("linux"):
         return LinuxBackend()
+    if sys.platform.startswith("freebsd"):
+        return FreeBsdBackend()
 
     raise NotImplementedError(f"devbind has no backend for platform '{sys.platform}'")
 
 
 class System:
     # DPDK/SPDK and xNVMe/uPCIe convention: pinning user space pages for DMA
-    # (VFIO_IOMMU_MAP_DMA on Linux) counts against RLIMIT_MEMLOCK. Below
-    # 64 MiB the buffer-pool allocation fails outright.
+    # (VFIO_IOMMU_MAP_DMA on Linux, nic_uio/contigmem on FreeBSD) counts against
+    # RLIMIT_MEMLOCK. Below 64 MiB the buffer-pool allocation fails outright.
     MEMLOCK_MIN_BYTES = 64 * 1024 * 1024
 
     def __init__(self):
@@ -334,7 +511,7 @@ def print_props(args, device: Device):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Inspect and control PCI device-driver binding in Linux"
+        description="Inspect and control PCI device-driver binding on Linux and FreeBSD"
     )
 
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -369,7 +546,7 @@ def parse_args():
         "--bind",
         type=parse_bind,
         help="Unbind if bound; then bind to the given driver-name "
-        "[nvme, vfio-pci, uio_pci_generic] or to a driver file (path)",
+        "[nvme, vfio-pci, uio_pci_generic, nic_uio] or to a driver file (path)",
     )
 
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
