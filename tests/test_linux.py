@@ -2,9 +2,11 @@
 # Copyright (c) Simon Andreas Frimann Lund <os@safl.dk>
 """Unit tests for the Linux backend (runnable on any platform)."""
 
+import sys
 from types import SimpleNamespace
 
 from devbind import devbind
+from devbind.devbind import LinuxBackend, Device
 
 
 # Representative `lspci -Dvmmnk` output: an NVMe controller and a
@@ -27,18 +29,65 @@ LSPCI_DVMMNK = (
 )
 
 
-def test_device_scan_named_device_bypasses_class_filter(monkeypatch):
+def test_scan_devices_parses_and_filters(monkeypatch):
     monkeypatch.setattr(
         devbind,
         "run",
         lambda cmd: SimpleNamespace(stdout=LSPCI_DVMMNK, stderr="", returncode=0),
     )
     # Avoid touching the real /sys and /dev during probing
-    for name in ("probe_handles", "probe_usage", "probe_driver", "probe_iommugroup"):
-        monkeypatch.setattr(devbind.Device, name, lambda self: None)
+    for name in ("_probe_handles", "_probe_usage", "_probe_driver", "_probe_iommugroup"):
+        monkeypatch.setattr(LinuxBackend, name, staticmethod(lambda device: None))
 
-    args = SimpleNamespace(device="0000:03:00.0", classcode=0x0108)
-    devices = list(devbind.device_scan(args))
+    devices = list(LinuxBackend().scan_devices(0x0108))
+
+    # The ethernet device (class 0x0200) is filtered out
+    assert [d.bdf for d in devices] == ["0000:01:00.0"]
+
+    nvme = devices[0]
+    assert nvme.vendor == "144d"
+    assert nvme.device == "a808"
+    assert nvme.classcode == "0108"
+
+
+def test_bind_writes_override_then_bind_then_setpci(monkeypatch):
+    writes = []
+    calls = []
+    monkeypatch.setattr(devbind, "sysfs_write", lambda path, text: writes.append((str(path), text)))
+    monkeypatch.setattr(
+        devbind,
+        "run",
+        lambda cmd: calls.append(cmd) or SimpleNamespace(stdout="", stderr="", returncode=0),
+    )
+    monkeypatch.setattr(LinuxBackend, "unbind", lambda self, device: None)
+
+    device = Device(
+        bdf="0000:01:00.0", vendor="144d", device="a808", classcode="0108", driver="nvme"
+    )
+    LinuxBackend().bind(device, "uio_pci_generic")
+
+    assert writes == [
+        ("/sys/bus/pci/devices/0000:01:00.0/driver_override", "uio_pci_generic"),
+        ("/sys/bus/pci/drivers/uio_pci_generic/bind", "0000:01:00.0"),
+    ]
+    assert "setpci -s 0000:01:00.0 COMMAND=0x06" in calls
+
+
+def test_get_backend_selects_linux(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert isinstance(devbind.get_backend(), LinuxBackend)
+
+
+def test_scan_devices_named_device_bypasses_class_filter(monkeypatch):
+    monkeypatch.setattr(
+        devbind,
+        "run",
+        lambda cmd: SimpleNamespace(stdout=LSPCI_DVMMNK, stderr="", returncode=0),
+    )
+    for name in ("_probe_handles", "_probe_usage", "_probe_driver", "_probe_iommugroup"):
+        monkeypatch.setattr(LinuxBackend, name, staticmethod(lambda device: None))
+
+    devices = list(LinuxBackend().scan_devices(0x0108, "0000:03:00.0"))
 
     # The ethernet device is found by BDF even though its class is 0x0200
     assert [d.bdf for d in devices] == ["0000:03:00.0"]
