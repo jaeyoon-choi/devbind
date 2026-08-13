@@ -82,6 +82,27 @@ for i in 1 2 3 4 5; do
 done
 camcontrol devlist 2>/dev/null | grep -q nda && ok "nda disk back after rebind" || bad "nda after rebind"
 
+note "nic_uio real bind (needs the dpdk kmod)"
+if [ -e /boot/modules/nic_uio.ko ]; then
+    $DEVBIND --bind nic_uio --device "$BDF" >/tmp/bind-uio.out 2>&1 || bad "nic_uio bind rc"
+    pciconf -l | grep -q "^nic_uio[0-9]*@$SEL:" && ok "nic_uio attached" || bad "nic_uio attach"
+    CMD=$(pciconf -r "$SEL" 0x4 | tr -d ' ')
+    case "$CMD" in
+        *6) ok "bus-mastering enabled ($CMD)" ;;
+        *) bad "COMMAND register not set ($CMD)" ;;
+    esac
+    kenv hw.nic_uio.bdfs >/dev/null 2>&1 && ok "bdfs entry registered" || bad "bdfs entry missing"
+    $DEVBIND --bind nvme --device "$BDF" >/tmp/bind-back.out 2>&1 || bad "rebind nvme rc"
+    pciconf -l | grep -q "^nvme[0-9]*@$SEL:" && ok "back on the nvme driver" || bad "not back on nvme"
+    if kenv hw.nic_uio.bdfs >/dev/null 2>&1; then
+        bad "bdfs entry not cleaned up"
+    else
+        ok "bdfs entry cleaned up"
+    fi
+else
+    echo "skip: /boot/modules/nic_uio.ko not installed"
+fi
+
 note "result"
 if [ "$fail" -eq 0 ]; then
     echo "ALL CHECKS PASSED"
